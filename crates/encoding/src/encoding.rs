@@ -305,16 +305,15 @@ impl Encoding {
         const SKIA_EPSILON: f32 = 1.0 / (1 << 12) as f32;
         if gradient.p0 == gradient.p1 && (gradient.r0 - gradient.r1).abs() < SKIA_EPSILON {
             self.encode_color(DrawColor::new(Color::TRANSPARENT));
+            return;
         }
-        else {
-            match self.add_ramp(color_stops, alpha, extend) {
-                RampStops::Empty => self.encode_color(DrawColor::new(Color::TRANSPARENT)),
-                RampStops::One(color) => self.encode_color(DrawColor::new(color)),
-                _ => {
-                    self.draw_tags.push(DrawTag::RADIAL_GRADIENT);
-                    self.draw_data
-                        .extend_from_slice(bytemuck::bytes_of(&gradient));
-                }
+        match self.add_ramp(color_stops, alpha, extend) {
+            RampStops::Empty => self.encode_color(DrawColor::new(Color::TRANSPARENT)),
+            RampStops::One(color) => self.encode_color(DrawColor::new(color)),
+            _ => {
+                self.draw_tags.push(DrawTag::RADIAL_GRADIENT);
+                self.draw_data
+                    .extend_from_slice(bytemuck::bytes_of(&gradient));
             }
         }
     }
