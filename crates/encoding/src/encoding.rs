@@ -71,6 +71,32 @@ impl Encoding {
         }
     }
 
+    pub fn test() {
+        let mut encoding0: Encoding = Encoding::new();
+        encoding0.reset(true);
+        encoding0.encode_transform(Transform { matrix: [1.0, 0.0, 0.0, 1.0], translation: [0.0, 0.0] });
+        encoding0.encode_linewidth(-1.0);
+        let mut path_encoder1 = encoding0.encode_path(true);
+        path_encoder1.move_to(0.0, 0.0);
+        path_encoder1.line_to(100.0, 0.0);
+        path_encoder1.line_to(100.0, 50.0);
+        path_encoder1.line_to(0.0, 50.0);
+        path_encoder1.line_to(0.0, 0.0);
+        path_encoder1.close();
+        path_encoder1.finish(true);
+        encoding0.encode_color(DrawColor {rgba: 0xff0000ff});
+        let mut encoding2: Encoding = Encoding::new();
+        encoding2.append(&encoding0, &None);
+        let mut encoding1: Encoding = Encoding::new();
+        encoding1.reset(false);
+        encoding1.append(&mut encoding2, &Some(Transform { matrix: [2.0, 0.0, 0.0, 2.0], translation: [0.0, 0.0] }));
+        let mut path_encoder2 = encoding1.encode_path(true);
+        path_encoder2.move_to(0.0, 0.0);
+        path_encoder2.line_to(1.0, 0.0);
+        path_encoder2.close();
+        path_encoder2.finish(true);
+    }
+
     /// Appends another encoding to this one with an optional transform.
     pub fn append(&mut self, other: &Self, transform: &Option<Transform>) {
         #[cfg(feature = "full")]

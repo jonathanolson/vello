@@ -39,6 +39,7 @@ use shaders::FullShaders;
 
 /// Temporary export, used in with_winit for stats
 pub use vello_encoding::BumpAllocators;
+pub use vello_encoding::{Encoding, Transform, DrawColor, PathTag, DrawLinearGradient, DrawRadialGradient};
 use wgpu::{Device, Queue, SurfaceTexture, TextureFormat, TextureView};
 
 /// Catch-all error type.
