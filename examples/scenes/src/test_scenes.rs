@@ -39,6 +39,7 @@ pub fn test_scenes() -> SceneSet {
         function: Box::new(crate::mmark::MMark::new(80_000)),
     };
     let scenes = vec![
+        scene!(clip_issue),
         splash_scene,
         mmark_scene,
         scene!(funky_paths),
@@ -57,6 +58,35 @@ pub fn test_scenes() -> SceneSet {
 }
 
 // Scenes
+
+fn clip_issue(sb: &mut SceneBuilder, _: &mut SceneParams) {
+
+    let large_background_rect = kurbo::Rect::new(
+        -1000.0, -1000.0,
+        2000.0, 2000.0
+    );
+    let inside_clip_rect = kurbo::Rect::new(
+        11.0, 13.399999999999999,
+        59.0, 56.6
+    );
+    let outside_clip_rect = kurbo::Rect::new(
+        12.599999999999998, 12.599999999999998,
+        57.400000000000006, 57.400000000000006
+    );
+    let clip_rect = kurbo::Rect::new(
+        0.0, 0.0,
+        74.4, 339.20000000000005
+    );
+    let scale = 0.8876953125;
+
+    sb.push_layer( BlendMode { mix: peniko::Mix::Normal, compose: peniko::Compose::SrcOver}, 1.0, Affine::new([scale, 0.0, 0.0, scale, 27.07470703125, 176.40660533027858]), &clip_rect);
+
+    sb.fill( peniko::Fill::NonZero, kurbo::Affine::new([scale, 0.0, 0.0, scale, 27.07470703125, 176.40660533027858]), peniko::Color::rgb8(0, 0, 255), None, &large_background_rect);
+    sb.fill( peniko::Fill::NonZero, kurbo::Affine::new([scale, 0.0, 0.0, scale, 29.027636718750003, 182.9755506427786]), peniko::Color::rgb8(0, 255, 0), None, &inside_clip_rect);
+    sb.fill( peniko::Fill::NonZero, kurbo::Affine::new([scale, 0.0, 0.0, scale, 29.027636718750003, 559.3583631427786]), peniko::Color::rgb8(255, 0, 0), None, &outside_clip_rect);
+
+    sb.pop_layer();
+}
 
 fn funky_paths(sb: &mut SceneBuilder, _: &mut SceneParams) {
     use PathEl::*;
