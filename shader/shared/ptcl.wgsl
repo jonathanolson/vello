@@ -64,11 +64,23 @@ struct CmdRadGrad {
 struct CmdImage {
     matrx: vec4<f32>,
     xlat: vec2<f32>,
-    atlas_offset: vec2<f32>,
-    extents: vec2<f32>,
+    atlas_offset: vec2<i32>,
+    extents: vec2<i32>,
+    extend: vec2<u32>,
+    alpha: f32,
 }
 
 struct CmdEndClip {
     blend: u32,
-    alpha: f32,
+
+    // Columns of the 4x5 color multiplication matrix
+    color_matrx_0: vec4<f32>,
+    color_matrx_1: vec4<f32>,
+    color_matrx_2: vec4<f32>,
+    color_matrx_3: vec4<f32>,
+    color_matrx_4: vec4<f32>,
+
+    // Whether the output alpha is proportional to the input alpha (and does not depend on RGB)
+    // If this is true, we can skip handling premultiplication
+    needs_un_premultiply: bool,
 }

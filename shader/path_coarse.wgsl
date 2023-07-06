@@ -32,19 +32,7 @@ var<storage, read_write> segments: array<Segment>;
 #endif
 
 var<private> pathdata_base: u32;
-
-fn read_f32_point(ix: u32) -> vec2<f32> {
-    let x = bitcast<f32>(scene[pathdata_base + ix]);
-    let y = bitcast<f32>(scene[pathdata_base + ix + 1u]);
-    return vec2(x, y);
-}
-
-fn read_i16_point(ix: u32) -> vec2<f32> {
-    let raw = scene[pathdata_base + ix];
-    let x = f32(i32(raw << 16u) >> 16u);
-    let y = f32(i32(raw) >> 16u);
-    return vec2(x, y);
-}
+#import pathdata_util
 
 #ifndef cubics_out
 struct SubdivResult {

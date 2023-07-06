@@ -14,7 +14,6 @@
 #import config
 #import pathtag
 #import cubic
-#import transform
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -39,6 +38,8 @@ var<storage, read_write> path_bboxes: array<AtomicPathBbox>;
 
 @group(0) @binding(4)
 var<storage, read_write> cubics: array<Cubic>;
+
+#import transform
 
 // Monoid is yagni, for future optimization
 
@@ -71,32 +72,7 @@ var<storage, read_write> cubics: array<Cubic>;
 // }
 
 var<private> pathdata_base: u32;
-
-fn read_f32_point(ix: u32) -> vec2<f32> {
-    let x = bitcast<f32>(scene[pathdata_base + ix]);
-    let y = bitcast<f32>(scene[pathdata_base + ix + 1u]);
-    return vec2(x, y);
-}
-
-fn read_i16_point(ix: u32) -> vec2<f32> {
-    let raw = scene[pathdata_base + ix];
-    let x = f32(i32(raw << 16u) >> 16u);
-    let y = f32(i32(raw) >> 16u);
-    return vec2(x, y);
-}
-
-fn read_transform(transform_base: u32, ix: u32) -> Transform {
-    let base = transform_base + ix * 6u;
-    let c0 = bitcast<f32>(scene[base]);
-    let c1 = bitcast<f32>(scene[base + 1u]);
-    let c2 = bitcast<f32>(scene[base + 2u]);
-    let c3 = bitcast<f32>(scene[base + 3u]);
-    let c4 = bitcast<f32>(scene[base + 4u]);
-    let c5 = bitcast<f32>(scene[base + 5u]);
-    let matrx = vec4(c0, c1, c2, c3);
-    let translate = vec2(c4, c5);
-    return Transform(matrx, translate);
-}
+#import pathdata_util
 
 fn round_down(x: f32) -> i32 {
     return i32(floor(x));

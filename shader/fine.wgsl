@@ -76,12 +76,13 @@ fn read_rad_grad(cmd_ix: u32) -> CmdRadGrad {
     let index = index_mode >> 2u;
     let extend_mode = index_mode & 0x3u;
     let info_offset = ptcl[cmd_ix + 2u];
-    let m0 = bitcast<f32>(info[info_offset]);
-    let m1 = bitcast<f32>(info[info_offset + 1u]);
-    let m2 = bitcast<f32>(info[info_offset + 2u]);
-    let m3 = bitcast<f32>(info[info_offset + 3u]);
-    let matrx = vec4(m0, m1, m2, m3);
-    let xlat = vec2(bitcast<f32>(info[info_offset + 4u]), bitcast<f32>(info[info_offset + 5u]));
+    let matrx = bitcast<vec4<f32>>(vec4(
+        info[info_offset],
+        info[info_offset + 1u],
+        info[info_offset + 2u],
+        info[info_offset + 3u]
+    ));
+    let xlat = bitcast<vec2<f32>>(vec2(info[info_offset + 4u], info[info_offset + 5u]));
     let focal_x = bitcast<f32>(info[info_offset + 6u]);
     let radius = bitcast<f32>(info[info_offset + 7u]);
     let flags_kind = info[info_offset + 8u];
@@ -92,44 +93,89 @@ fn read_rad_grad(cmd_ix: u32) -> CmdRadGrad {
 
 fn read_image(cmd_ix: u32) -> CmdImage {
     let info_offset = ptcl[cmd_ix + 1u];
-    let m0 = bitcast<f32>(info[info_offset]);
-    let m1 = bitcast<f32>(info[info_offset + 1u]);
-    let m2 = bitcast<f32>(info[info_offset + 2u]);
-    let m3 = bitcast<f32>(info[info_offset + 3u]);
-    let matrx = vec4(m0, m1, m2, m3);
-    let xlat = vec2(bitcast<f32>(info[info_offset + 4u]), bitcast<f32>(info[info_offset + 5u]));
+    let matrx = bitcast<vec4<f32>>(vec4(
+        info[info_offset],
+        info[info_offset + 1u],
+        info[info_offset + 2u],
+        info[info_offset + 3u]
+    ));
+    let xlat = bitcast<vec2<f32>>(vec2(info[info_offset + 4u], info[info_offset + 5u]));
     let xy = info[info_offset + 6u];
     let width_height = info[info_offset + 7u];
+    let extend_mode = info[info_offset + 8u];
+    let alpha = bitcast<f32>(info[info_offset + 9u]);
     // The following are not intended to be bitcasts
-    let x = f32(xy >> 16u);
-    let y = f32(xy & 0xffffu);
-    let width = f32(width_height >> 16u);
-    let height = f32(width_height & 0xffffu);
-    return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height));
+    let x = i32(xy >> 16u);
+    let y = i32(xy & 0xffffu);
+    let width = i32(width_height >> 16u);
+    let height = i32(width_height & 0xffffu);
+    let extend = vec2(extend_mode >> 2u, extend_mode & 0x3u);
+    return CmdImage(matrx, xlat, vec2(x, y), vec2(width, height), extend, alpha);
 }
 
 fn read_end_clip(cmd_ix: u32) -> CmdEndClip {
     let blend = ptcl[cmd_ix + 1u];
-    let alpha = bitcast<f32>(ptcl[cmd_ix + 2u]);
-    return CmdEndClip(blend, alpha);
+    let color_matrx_0 = bitcast<vec4<f32>>(vec4(ptcl[cmd_ix + 2u], ptcl[cmd_ix + 3u], ptcl[cmd_ix + 4u], ptcl[cmd_ix + 5u]));
+    let color_matrx_1 = bitcast<vec4<f32>>(vec4(ptcl[cmd_ix + 6u], ptcl[cmd_ix + 7u], ptcl[cmd_ix + 8u], ptcl[cmd_ix + 9u]));
+    let color_matrx_2 = bitcast<vec4<f32>>(vec4(ptcl[cmd_ix + 10u], ptcl[cmd_ix + 11u], ptcl[cmd_ix + 12u], ptcl[cmd_ix + 13u]));
+    let color_matrx_3 = bitcast<vec4<f32>>(vec4(ptcl[cmd_ix + 14u], ptcl[cmd_ix + 15u], ptcl[cmd_ix + 16u], ptcl[cmd_ix + 17u]));
+    let color_matrx_4 = bitcast<vec4<f32>>(vec4(ptcl[cmd_ix + 18u], ptcl[cmd_ix + 19u], ptcl[cmd_ix + 20u], ptcl[cmd_ix + 21u]));
+    let needs_un_premultiply = ptcl[cmd_ix + 22u] == 1u;
+    return CmdEndClip(blend, color_matrx_0, color_matrx_1, color_matrx_2, color_matrx_3, color_matrx_4, needs_un_premultiply);
 }
 
+let EXTEND_PAD = 0u;
+let EXTEND_REPEAT = 1u;
+let EXTEND_REFLECT = 2u;
+
 fn extend_mode(t: f32, mode: u32) -> f32 {
-    let EXTEND_PAD = 0u;
-    let EXTEND_REPEAT = 1u;
-    let EXTEND_REFLECT = 2u;
     switch mode {
-        // EXTEND_PAD
-        case 0u: {
+        case EXTEND_PAD: {
             return clamp(t, 0.0, 1.0);
         }
-        // EXTEND_REPEAT
-        case 1u: {
+        case EXTEND_REPEAT: {
             return fract(t);
         }
         // EXTEND_REFLECT
         default: {
             return abs(t - 2.0 * round(0.5 * t));
+        }
+    }
+}
+
+// Integer version of extend_mode.
+// Given size=4, provide the following patterns:
+//
+// input:  -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+//
+// pad:     0,  0,  0,  0,  0,  0, 0, 1, 2, 3, 3, 3, 3, 3, 3, 3
+// repeat:  2,  3,  0,  1,  2,  3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1
+// reflect: 2,  3,  3,  2,  1,  0, 0, 1, 2, 3, 3, 2, 1, 0, 0, 1
+fn extend_mode_i32(i: i32, size: i32, mode: u32) -> i32 {
+    switch mode {
+        case EXTEND_PAD: {
+            return clamp(i, 0i, size - 1i);
+        }
+        case EXTEND_REPEAT: {
+            if i >= 0i {
+                return i % size;
+            } else {
+                return size - ((-i - 1i) % size) - 1i;
+            }
+        }
+        case EXTEND_REFLECT: {
+            // easier to convert both to positive (with a repeat offset)
+            let pos_i = select(i, -i - 1i, i < 0i);
+
+            let section = pos_i % (size * 2i);
+            if section < size {
+                return section;
+            } else {
+                return 2i * size - section - 1i;
+            }
+        }
+        default: {
+            return 0i;
         }
     }
 }
@@ -250,8 +296,7 @@ fn main(
             break;
         }
         switch tag {
-            // CMD_FILL
-            case 1u: {
+            case CMD_FILL: {
                 let fill = read_fill(cmd_ix);
                 let segments = fill.tile >> 1u;
                 let even_odd = (fill.tile & 1u) != 0u;
@@ -259,21 +304,18 @@ fn main(
                 area = fill_path(tile, xy, even_odd);
                 cmd_ix += 3u;
             }
-            // CMD_STROKE
-            case 2u: {
+            case CMD_STROKE: {
                 let stroke = read_stroke(cmd_ix);
                 area = stroke_path(stroke.tile, stroke.half_width, xy);
                 cmd_ix += 3u;
             }
-            // CMD_SOLID
-            case 3u: {
+            case CMD_SOLID: {
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     area[i] = 1.0;
                 }
                 cmd_ix += 1u;
             }
-            // CMD_COLOR
-            case 5u: {
+            case CMD_COLOR: {
                 let color = read_color(cmd_ix);
                 let fg = unpack4x8unorm(color.rgba_color).wzyx;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
@@ -282,8 +324,7 @@ fn main(
                 }
                 cmd_ix += 2u;
             }
-            // CMD_LIN_GRAD
-            case 6u: {
+            case CMD_LIN_GRAD: {
                 let lin = read_lin_grad(cmd_ix);
                 let d = lin.line_x * xy.x + lin.line_y * xy.y + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
@@ -295,8 +336,7 @@ fn main(
                 }
                 cmd_ix += 3u;
             }
-            // CMD_RAD_GRAD
-            case 7u: {
+            case CMD_RAD_GRAD: {
                 let rad = read_rad_grad(cmd_ix);
                 let focal_x = rad.focal_x;
                 let radius = rad.radius;
@@ -341,30 +381,54 @@ fn main(
                 }
                 cmd_ix += 3u;
             }
-            // CMD_IMAGE
-            case 8u: {
+            case CMD_IMAGE: {
                 let image = read_image(cmd_ix);
-                let atlas_extents = image.atlas_offset + image.extents;
+                let width = image.extents.x;
+                let height = image.extents.y;
+
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i), xy.y);
-                    let atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat + image.atlas_offset;
-                    // This currently clips to the image bounds. TODO: extend modes
-                    if all(atlas_uv < atlas_extents) && area[i] != 0.0 {
-                        let uv_quad = vec4(max(floor(atlas_uv), image.atlas_offset), min(ceil(atlas_uv), atlas_extents));
-                        let uv_frac = fract(atlas_uv);
-                        let a = premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.xy), 0));
-                        let b = premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.xw), 0));
-                        let c = premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.zy), 0));
-                        let d = premul_alpha(textureLoad(image_atlas, vec2<i32>(uv_quad.zw), 0));
+                    if area[i] != 0.0 {
+                        let my_xy = vec2(xy.x + f32(i), xy.y);
+
+                        // Our "normal" unit_xy is in the exact range [0.0, image.extents.x - 1.0] / image.extents.x
+                        // This maps exactly to samples
+
+                        // Our "half-shifted" unit_xy is in the range [-0.5, image.extents.x - 0.5] / image.extents.x
+                        // So we get queried up to [-1, image.extents.x] / image.extents.x]?
+
+                        // So effectively the center of the pixels goes from 0/width to (width-1)/width
+                        // We get queried from -1/width to width/width (i.e. 1)
+
+                        // 0 is the center of the "first" pixel, (size-1) is the center of the "last" pixel
+                        // NOTE: we will get queries potentially from the range (-1, size) for rectangular images,
+                        // or unconstrained for repeated images (i.e. a shape that isn't just a rectangle for this image)
+                        let raw_xy = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
+
+                        // Get the quad of pixels in "raw" coordinates that we need to sample. These are just integers,
+                        // and don't yet lie within the image's extents.
+                        let uv_quad_unmapped = vec4<i32>(vec4(floor(raw_xy), ceil(raw_xy)));
+
+                        // Use the extend mode to clamp the quad to the image's extents.
+                        let uv_quad = vec4(
+                            extend_mode_i32(uv_quad_unmapped.x, width, image.extend.x),
+                            extend_mode_i32(uv_quad_unmapped.y, height, image.extend.y),
+                            extend_mode_i32(uv_quad_unmapped.z, width, image.extend.x),
+                            extend_mode_i32(uv_quad_unmapped.w, height, image.extend.y)
+                        ) + vec4(image.atlas_offset, image.atlas_offset);
+
+                        let uv_frac = fract(raw_xy);
+                        let a = premul_alpha(textureLoad(image_atlas, uv_quad.xy, 0));
+                        let b = premul_alpha(textureLoad(image_atlas, uv_quad.xw, 0));
+                        let c = premul_alpha(textureLoad(image_atlas, uv_quad.zy, 0));
+                        let d = premul_alpha(textureLoad(image_atlas, uv_quad.zw, 0));
                         let fg_rgba = mix(mix(a, b, uv_frac.y), mix(c, d, uv_frac.y), uv_frac.x);
-                        let fg_i = fg_rgba * area[i];
+                        let fg_i = fg_rgba * image.alpha * area[i];
                         rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
                     }
                 }
                 cmd_ix += 2u;
             }
-            // CMD_BEGIN_CLIP
-            case 9u: {
+            case CMD_BEGIN_CLIP: {
                 if clip_depth < BLEND_STACK_SPLIT {
                     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                         blend_stack[clip_depth][i] = pack4x8unorm(rgba[i]);
@@ -376,9 +440,9 @@ fn main(
                 clip_depth += 1u;
                 cmd_ix += 1u;
             }
-            // CMD_END_CLIP
-            case 10u: {
+            case CMD_END_CLIP: {
                 let end_clip = read_end_clip(cmd_ix);
+
                 clip_depth -= 1u;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     var bg_rgba: u32;
@@ -388,13 +452,76 @@ fn main(
                         // load from memory
                     }
                     let bg = unpack4x8unorm(bg_rgba);
-                    let fg = rgba[i] * area[i] * end_clip.alpha;
+
+                    var rgba_in = rgba[i];
+                    var rgba_out: vec4<f32>;
+
+                    // SVG filter spec (https://www.w3.org/TR/SVG11/filters.html#feColorMatrixElement) notes:
+                    // | These matrices often perform an identity mapping in the alpha channel. If that is the case, an
+                    // | implementation can avoid the costly undoing and redoing of the premultiplication for all pixels
+                    // | with A = 1.
+
+                    // The matrix multiplication is essentially:
+                    // [ r1 ]   [ m00 m01 m02 m03 m04 ]   [ r0 ]
+                    // [ g1 ]   [ m10 m11 m12 m13 m14 ]   [ g0 ]
+                    // [ b1 ] = [ m20 m21 m22 m23 m24 ] * [ b0 ]
+                    // [ a1 ]   [ m30 m31 m32 m33 m34 ]   [ a0 ]
+                    //                                    [ 1 ]
+
+                    // This condition should be the same for all invocations
+                    if end_clip.needs_un_premultiply {
+                        // Max with a small epsilon to avoid NaNs
+                        let a_inv = 1.0 / max(rgba_in.a, 1e-6);
+                        // Un-premultiply
+                        rgba_in = vec4(rgba_in.rgb * a_inv, rgba_in.a);
+
+                        // Homogeneous color-matrix multiply on the un-premultiplied color
+                        rgba_out =
+                            end_clip.color_matrx_0 * rgba_in.r +
+                            end_clip.color_matrx_1 * rgba_in.g +
+                            end_clip.color_matrx_2 * rgba_in.b +
+                            end_clip.color_matrx_3 * rgba_in.a +
+                            end_clip.color_matrx_4;
+
+                        rgba_out = clamp(rgba_out, vec4(0.0), vec4(1.0));
+
+                        // Premultiply again
+                        rgba_out = vec4(rgba_out.rgb * rgba_out.a, rgba_out.a);
+                    } else {
+                        // Handling the case where output alpha (a1) is proportional to input alpha (a0), and does not
+                        // depend on the RGB. This means m30=m31=m32=m34=0, and that a1=m33 * a0.
+                        //
+                        // Our matrix uses non-premultiplied alpha, so its input is (r0/a0, g0/a0, b0/a0, a0, 1)
+                        // (it's homogeneous), and the output is (r1/a1, g1/a1, b1/a1, a1, 1), as column vectors
+                        // (omitting the transpose notation)
+                        //
+                        // Thus for e.g. red:
+                        // r1/a1 = (r0/a0)m00 + (g0/a0)m01 + (b0/a0)m02 + (a0)m03 + (1)m04
+                        //
+                        // with a1 = m33 * a0 and solving for r1, this becomes:
+                        // r1 = m33 * ( (r0)m00 + (g0)m01 + (b0)m02 + (a0^2)m03 + (a0)m04 )
+                        //
+                        // thus:
+                        // (r1, g1, b1) = m33 * M * (r0, g0, b0, a0^2, a0)
+                        // a1 = m33 * a0
+                        let new_rgb =
+                            end_clip.color_matrx_0.rgb * rgba_in.r +
+                            end_clip.color_matrx_1.rgb * rgba_in.g +
+                            end_clip.color_matrx_2.rgb * rgba_in.b +
+                            end_clip.color_matrx_3.rgb * rgba_in.a * rgba_in.a +
+                            end_clip.color_matrx_4.rgb * rgba_in.a;
+                        rgba_out = end_clip.color_matrx_3.a * vec4(new_rgb, rgba_in.a);
+
+                        // Clamp down to ensure we're still validly premultiplied
+                        rgba_out = clamp(rgba_out, vec4(0.0), vec4(min(1.0, rgba_out.a)));
+                    }
+
+                    let fg = rgba_out * area[i];
                     rgba[i] = blend_mix_compose(bg, fg, end_clip.blend);
                 }
-                cmd_ix += 3u;
+                cmd_ix += 23u;
             }
-            // CMD_JUMP
-            case 11u: {
+            case CMD_JUMP: {
                 cmd_ix = ptcl[cmd_ix + 1u];
             }
             default: {}
@@ -404,11 +531,13 @@ fn main(
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
         let coords = xy_uint + vec2(i, 0u);
         if coords.x < config.target_width && coords.y < config.target_height {
-            let fg = rgba[i];
-            // Max with a small epsilon to avoid NaNs
-            let a_inv = 1.0 / max(fg.a, 1e-6);
-            let rgba_sep = vec4(fg.rgb * a_inv, fg.a);
-            textureStore(output, vec2<i32>(coords), rgba_sep);
+            var rgba_out = rgba[i];
+            if config.premultiply_output != 0u {
+                // Max with a small epsilon to avoid NaNs
+                let a_inv = 1.0 / max(rgba_out.a, 1e-6);
+                rgba_out = vec4(rgba_out.rgb * a_inv, rgba_out.a);
+            }
+            textureStore(output, vec2<i32>(coords), rgba_out);
         }
     } 
 #else

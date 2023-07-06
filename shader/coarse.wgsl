@@ -140,11 +140,36 @@ fn write_begin_clip() {
 }
 
 fn write_end_clip(end_clip: CmdEndClip) {
-    alloc_cmd(3u);
+    let color_matrx_u32_0 = bitcast<vec4<u32>>(end_clip.color_matrx_0);
+    let color_matrx_u32_1 = bitcast<vec4<u32>>(end_clip.color_matrx_1);
+    let color_matrx_u32_2 = bitcast<vec4<u32>>(end_clip.color_matrx_2);
+    let color_matrx_u32_3 = bitcast<vec4<u32>>(end_clip.color_matrx_3);
+    let color_matrx_u32_4 = bitcast<vec4<u32>>(end_clip.color_matrx_4);
+    alloc_cmd(23u);
     ptcl[cmd_offset] = CMD_END_CLIP;
     ptcl[cmd_offset + 1u] = end_clip.blend;
-    ptcl[cmd_offset + 2u] = bitcast<u32>(end_clip.alpha);
-    cmd_offset += 3u;
+    ptcl[cmd_offset + 2u] = color_matrx_u32_0.x;
+    ptcl[cmd_offset + 3u] = color_matrx_u32_0.y;
+    ptcl[cmd_offset + 4u] = color_matrx_u32_0.z;
+    ptcl[cmd_offset + 5u] = color_matrx_u32_0.w;
+    ptcl[cmd_offset + 6u] = color_matrx_u32_1.x;
+    ptcl[cmd_offset + 7u] = color_matrx_u32_1.y;
+    ptcl[cmd_offset + 8u] = color_matrx_u32_1.z;
+    ptcl[cmd_offset + 9u] = color_matrx_u32_1.w;
+    ptcl[cmd_offset + 10u] = color_matrx_u32_2.x;
+    ptcl[cmd_offset + 11u] = color_matrx_u32_2.y;
+    ptcl[cmd_offset + 12u] = color_matrx_u32_2.z;
+    ptcl[cmd_offset + 13u] = color_matrx_u32_2.w;
+    ptcl[cmd_offset + 14u] = color_matrx_u32_3.x;
+    ptcl[cmd_offset + 15u] = color_matrx_u32_3.y;
+    ptcl[cmd_offset + 16u] = color_matrx_u32_3.z;
+    ptcl[cmd_offset + 17u] = color_matrx_u32_3.w;
+    ptcl[cmd_offset + 18u] = color_matrx_u32_4.x;
+    ptcl[cmd_offset + 19u] = color_matrx_u32_4.y;
+    ptcl[cmd_offset + 20u] = color_matrx_u32_4.z;
+    ptcl[cmd_offset + 21u] = color_matrx_u32_4.w;
+    ptcl[cmd_offset + 22u] = select(0u, 1u, end_clip.needs_un_premultiply);
+    cmd_offset += 23u;
 }
 
 @compute @workgroup_size(256)
@@ -358,16 +383,14 @@ fn main(
                 let tile_ix = sh_tile_base[el_ix] + sh_tile_stride[el_ix] * tile_y + tile_x;
                 let tile = tiles[tile_ix];
                 switch drawtag {
-                    // DRAWTAG_FILL_COLOR
-                    case 0x44u: {
+                    case DRAWTAG_FILL_COLOR: {
                         let linewidth = bitcast<f32>(info_bin_data[di]);
                         if write_path(tile, linewidth) {
                             let rgba_color = scene[dd];
                             write_color(CmdColor(rgba_color));
                         }
                     }
-                    // DRAWTAG_FILL_LIN_GRADIENT
-                    case 0x114u: {
+                    case DRAWTAG_FILL_LIN_GRADIENT: {
                         let linewidth = bitcast<f32>(info_bin_data[di]);
                         if write_path(tile, linewidth) {
                             let index = scene[dd];
@@ -375,8 +398,7 @@ fn main(
                             write_grad(CMD_LIN_GRAD, index, info_offset);
                         }
                     }
-                    // DRAWTAG_FILL_RAD_GRADIENT
-                    case 0x29cu: {
+                    case DRAWTAG_FILL_RAD_GRADIENT: {
                         let linewidth = bitcast<f32>(info_bin_data[di]);
                         if write_path(tile, linewidth) {
                             let index = scene[dd];
@@ -384,15 +406,13 @@ fn main(
                             write_grad(CMD_RAD_GRAD, index, info_offset);
                         }
                     }
-                    // DRAWTAG_FILL_IMAGE
-                    case 0x248u: {
+                    case DRAWTAG_FILL_IMAGE: {
                         let linewidth = bitcast<f32>(info_bin_data[di]);
                         if write_path(tile, linewidth) {                            
                             write_image(di + 1u);
                         }
                     }
-                    // DRAWTAG_BEGIN_CLIP
-                    case 0x9u: {
+                    case DRAWTAG_BEGIN_CLIP: {
                         if tile.segments == 0u && tile.backdrop == 0 {
                             clip_zero_depth = clip_depth + 1u;
                         } else {
@@ -402,13 +422,23 @@ fn main(
                         }
                         clip_depth += 1u;
                     }
-                    // DRAWTAG_END_CLIP
-                    case 0x21u: {
+                    case DRAWTAG_END_CLIP: {
                         clip_depth -= 1u;
                         write_path(tile, -1.0);
                         let blend = scene[dd];
-                        let alpha = bitcast<f32>(scene[dd + 1u]);
-                        write_end_clip(CmdEndClip(blend, alpha));
+                        let color_matrx_0 = bitcast<vec4<f32>>(vec4(scene[dd + 1u], scene[dd + 2u], scene[dd + 3u], scene[dd + 4u]));
+                        let color_matrx_1 = bitcast<vec4<f32>>(vec4(scene[dd + 5u], scene[dd + 6u], scene[dd + 7u], scene[dd + 8u]));
+                        let color_matrx_2 = bitcast<vec4<f32>>(vec4(scene[dd + 9u], scene[dd + 10u], scene[dd + 11u], scene[dd + 12u]));
+                        let color_matrx_3 = bitcast<vec4<f32>>(vec4(scene[dd + 13u], scene[dd + 14u], scene[dd + 15u], scene[dd + 16u]));
+                        let color_matrx_4 = bitcast<vec4<f32>>(vec4(scene[dd + 17u], scene[dd + 18u], scene[dd + 19u], scene[dd + 20u]));
+
+                        // We'll handle the case where m33 (color_matrx_3.a) is non-1, as it's easy to do so.
+                        let needs_un_premultiply =
+                           color_matrx_0.a != 0.0 ||
+                           color_matrx_1.a != 0.0 ||
+                           color_matrx_2.a != 0.0 ||
+                           color_matrx_4.a != 0.0;
+                        write_end_clip(CmdEndClip(blend, color_matrx_0, color_matrx_1, color_matrx_2, color_matrx_3, color_matrx_4, needs_un_premultiply));
                         render_blend_depth -= 1u;
                     }
                     default: {}
@@ -416,12 +446,10 @@ fn main(
             } else {
                 // In "clip zero" state, suppress all drawing
                 switch drawtag {
-                    // DRAWTAG_BEGIN_CLIP
-                    case 0x9u: {
+                    case DRAWTAG_BEGIN_CLIP: {
                         clip_depth += 1u;
                     }
-                    // DRAWTAG_END_CLIP
-                    case 0x21u: {
+                    case DRAWTAG_END_CLIP: {
                         if clip_depth == clip_zero_depth {
                             clip_zero_depth = 0u;
                         }

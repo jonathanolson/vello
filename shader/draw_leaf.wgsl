@@ -6,7 +6,6 @@
 #import clip
 #import drawtag
 #import bbox
-#import transform
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -29,22 +28,10 @@ var<storage, read_write> info: array<u32>;
 @group(0) @binding(6)
 var<storage, read_write> clip_inp: array<ClipInp>;
 
+#import transform
 #import util
 
 let WG_SIZE = 256u;
-
-fn read_transform(transform_base: u32, ix: u32) -> Transform {
-    let base = transform_base + ix * 6u;
-    let c0 = bitcast<f32>(scene[base]);
-    let c1 = bitcast<f32>(scene[base + 1u]);
-    let c2 = bitcast<f32>(scene[base + 2u]);
-    let c3 = bitcast<f32>(scene[base + 3u]);
-    let c4 = bitcast<f32>(scene[base + 4u]);
-    let c5 = bitcast<f32>(scene[base + 5u]);
-    let matrx = vec4(c0, c1, c2, c3);
-    let translate = vec2(c4, c5);
-    return Transform(matrx, translate);
-}
 
 var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
 
@@ -122,12 +109,10 @@ fn main(
             linewidth *= sqrt(abs(matrx.x * matrx.w - matrx.y * matrx.z));
         }
         switch tag_word {
-            // DRAWTAG_FILL_COLOR
-            case 0x44u: {
+            case DRAWTAG_FILL_COLOR: {
                 info[di] = bitcast<u32>(linewidth);
             }
-            // DRAWTAG_FILL_LIN_GRADIENT
-            case 0x114u: {
+            case DRAWTAG_FILL_LIN_GRADIENT: {
                 info[di] = bitcast<u32>(linewidth);
                 var p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
                 var p1 = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
@@ -141,8 +126,7 @@ fn main(
                 info[di + 2u] = bitcast<u32>(line_xy.y);
                 info[di + 3u] = bitcast<u32>(line_c);
             }
-            // DRAWTAG_FILL_RAD_GRADIENT
-            case 0x29cu: {
+            case DRAWTAG_FILL_RAD_GRADIENT: {
                 // Two-point conical gradient implementation based
                 // on the algorithm at <https://skia.org/docs/dev/design/conical/>
                 // This epsilon matches what Skia uses
@@ -215,28 +199,33 @@ fn main(
                     }
                     xform = user_to_scaled;
                 }
-                info[di + 1u] = bitcast<u32>(xform.matrx.x);
-                info[di + 2u] = bitcast<u32>(xform.matrx.y);
-                info[di + 3u] = bitcast<u32>(xform.matrx.z);
-                info[di + 4u] = bitcast<u32>(xform.matrx.w);
-                info[di + 5u] = bitcast<u32>(xform.translate.x);
-                info[di + 6u] = bitcast<u32>(xform.translate.y);
+                let xform_matrx_u32 = bitcast<vec4<u32>>(xform.matrx);
+                let xform_translate_u32 = bitcast<vec2<u32>>(xform.translate);
+                info[di + 1u] = xform_matrx_u32.x;
+                info[di + 2u] = xform_matrx_u32.y;
+                info[di + 3u] = xform_matrx_u32.z;
+                info[di + 4u] = xform_matrx_u32.w;
+                info[di + 5u] = xform_translate_u32.x;
+                info[di + 6u] = xform_translate_u32.y;
                 info[di + 7u] = bitcast<u32>(focal_x);
                 info[di + 8u] = bitcast<u32>(radius);
                 info[di + 9u] = bitcast<u32>((flags << 3u) | kind);
             }
-            // DRAWTAG_FILL_IMAGE
-            case 0x248u: {
+            case DRAWTAG_FILL_IMAGE: {
                 info[di] = bitcast<u32>(linewidth);
                 let inv = transform_inverse(transform);
-                info[di + 1u] = bitcast<u32>(inv.matrx.x);
-                info[di + 2u] = bitcast<u32>(inv.matrx.y);
-                info[di + 3u] = bitcast<u32>(inv.matrx.z);
-                info[di + 4u] = bitcast<u32>(inv.matrx.w);
-                info[di + 5u] = bitcast<u32>(inv.translate.x);
-                info[di + 6u] = bitcast<u32>(inv.translate.y);
-                info[di + 7u] = scene[dd];
-                info[di + 8u] = scene[dd + 1u];
+                let inv_matrx_u32 = bitcast<vec4<u32>>(inv.matrx);
+                let inv_translate_u32 = bitcast<vec2<u32>>(inv.translate);
+                info[di + 1u] = inv_matrx_u32.x;
+                info[di + 2u] = inv_matrx_u32.y;
+                info[di + 3u] = inv_matrx_u32.z;
+                info[di + 4u] = inv_matrx_u32.w;
+                info[di + 5u] = inv_translate_u32.x;
+                info[di + 6u] = inv_translate_u32.y;
+                info[di + 7u] = scene[dd]; // atlas x,y
+                info[di + 8u] = scene[dd + 1u]; // packed width/height
+                info[di + 9u] = scene[dd + 2u]; // packed extendX/extendY
+                info[di + 10u] = scene[dd + 3u]; // alpha
             }
             default: {}
         }

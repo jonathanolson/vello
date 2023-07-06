@@ -7,6 +7,7 @@
     "config": "${workspaceFolder}/shader/shared/config.wgsl",
     "cubic": "${workspaceFolder}/shader/shared/cubic.wgsl",
     "drawtag": "${workspaceFolder}/shader/shared/drawtag.wgsl",
+    "pathdata_util": "${workspaceFolder}/shader/shared/pathdata_util.wgsl",
     "pathtag": "${workspaceFolder}/shader/shared/pathtag.wgsl",
     "ptcl": "${workspaceFolder}/shader/shared/ptcl.wgsl",
     "segment": "${workspaceFolder}/shader/shared/segment.wgsl",
@@ -17,5 +18,6 @@
   "wgsl-analyzer.diagnostics.nagaVersion": "main",
   "wgsl-analyzer.preprocessor.shaderDefs": [
     "full"
-  ]
+  ],
+  "wgsl-analyzer.server.path": "~/.cargo/bin/wgsl_analyzer"
 }
